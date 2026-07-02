@@ -219,6 +219,6 @@ function copyInvitationCode(code: string) {
 </List>
 
 <BlockFooter class="text-center">
-  WebPush Console PWA v1.3.0<br />
+  WebPush Console PWA {__APP_VERSION__}<br />
   配置将保存在您的本地浏览器中 (LocalStorage)。
 </BlockFooter>

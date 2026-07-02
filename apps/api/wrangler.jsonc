@@ -3,6 +3,14 @@
   "name": "webpush-worker",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
+  "assets": {
+    // PWA 构建产物目录（相对于本文件），先 build PWA 再 deploy
+    "directory": "../pwa/dist",
+    // SPA 模式：访问不存在的路径时回退到 index.html，支持前端路由
+    "not_found_handling": "single-page-application",
+    // /api/* 先走 Worker（Hono 处理），其余路径直接由 Assets 静态托管
+    "run_worker_first": ["/api/*"]
+  },
   "d1_databases": [
     {
       "binding": "DB",

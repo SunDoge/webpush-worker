@@ -6,11 +6,12 @@
     "pkgs/*"
   ],
   "scripts": {
-    "dev:api": "bun --filter @webpush-worker/api dev",
-    "dev:pwa": "bun --filter @webpush-worker/pwa dev",
+    "dev:api": "cd apps/api && bun run dev",
+    "dev:pwa": "cd apps/pwa && bun run dev",
     "dev": "bun run dev:api & bun run dev:pwa",
-    "build": "bun --filter @webpush-worker/pwa run build",
-    "gen-schema": "bun --filter @webpush-worker/api gen-schema",
+    "build": "bun --filter=@webpush-worker/pwa run build",
+    "deploy": "bun run build && wrangler deploy --config apps/api/wrangler.jsonc",
+    "gen-schema": "cd apps/api && bun run gen-schema",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write --unsafe ."
