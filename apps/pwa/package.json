@@ -1,0 +1,43 @@
+{
+  "name": "@webpush-worker/pwa",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json"
+  },
+  "devDependencies": {
+    "@hono/standard-validator": "^0.2.3",
+    "@sundoge/kysely-d1": "^0.1.0",
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@tailwindcss/vite": "^4.3.2",
+    "@tsconfig/svelte": "^5.0.5",
+    "@types/node": "^24.6.2",
+    "@vite-pwa/assets-generator": "^1.0.2",
+    "svelte": "^5.39.9",
+    "svelte-check": "^4.3.2",
+    "tailwindcss": "^4.3.2",
+    "typescript": "~5.9.3",
+    "kysely": "^0.29.2",
+    "valibot": "^1.4.2",
+    "webpush-webcrypto": "^1.0.5",
+    "vite": "^7.1.9",
+    "vite-plugin-pwa": "^1.1.0",
+    "workbox-core": "^7.4.0",
+    "workbox-precaching": "^7.4.0",
+    "workbox-routing": "^7.4.0",
+    "workbox-strategies": "^7.4.0",
+    "workbox-window": "^7.4.0"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.23.0",
+    "@webpush-worker/api": "workspace:*",
+    "@webpush-worker/shared": "workspace:*",
+    "dexie": "^4.4.4",
+    "hono": "^4.12.27",
+    "konsta": "^5.2.0"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "webpush-worker",
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "pkgs/*"
+  ],
+  "scripts": {
+    "dev:api": "bun --filter @webpush-worker/api dev",
+    "dev:pwa": "bun --filter @webpush-worker/pwa dev",
+    "dev": "bun run dev:api & bun run dev:pwa",
+    "build": "bun --filter @webpush-worker/pwa run build",
+    "gen-schema": "bun --filter @webpush-worker/api gen-schema",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "check": "biome check --write --unsafe ."
+  },
+  "resolutions": {
+    "vite": "7.3.6",
+    "sharp": "0.34.5",
+    "sharp-ico": "^0.1.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.2"
+  }
+}
