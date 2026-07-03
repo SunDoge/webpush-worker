@@ -3,9 +3,20 @@ import { createMiddleware } from 'hono/factory';
 import { verify } from 'hono/jwt';
 import { getDb } from '../db';
 
+export type UserInfo = {
+  id: string;
+  username: string;
+  role: string;
+};
+
 export async function getAuthorizedUser(
-  c: Context,
-): Promise<{ id: string; username: string; role: string } | null> {
+  c: Context<{
+    Bindings: CloudflareBindings;
+    Variables: {
+      user: UserInfo;
+    };
+  }>,
+): Promise<UserInfo | null> {
   // 获取 Token 的三种方式
   let token: string | null = null;
   const authHeader = c.req.header('Authorization');
