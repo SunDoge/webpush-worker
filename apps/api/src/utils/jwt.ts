@@ -1,5 +1,5 @@
 import { sign } from 'hono/jwt';
-import type { UserInfo } from '../middleware/auth';
+import type { UserInfo } from '../types';
 
 const ACCESS_TOKEN_TTL = 60 * 15; // 15 minutes
 const REFRESH_TOKEN_TTL = 60 * 60 * 24 * 30; // 30 days

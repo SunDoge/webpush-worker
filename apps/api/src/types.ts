@@ -14,9 +14,3 @@ export type AuthEnv = {
 export type PublicEnv = {
   Bindings: CloudflareBindings;
 };
-
-export type JsonResult<T, E> = {
-  success: boolean;
-  data?: T;
-  error?: E;
-};

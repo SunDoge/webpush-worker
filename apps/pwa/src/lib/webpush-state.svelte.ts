@@ -11,7 +11,15 @@ type ApiJson<T = any> = {
 };
 
 export async function readApiJson<T = any>(res: { json(): Promise<unknown> }): Promise<ApiJson<T>> {
-  return (await res.json()) as ApiJson<T>;
+  const json = (await res.json()) as any;
+  if (json && typeof json === 'object' && 'code' in json) {
+    return {
+      success: json.code === 'ok',
+      data: json.data,
+      error: json.message || json.code,
+    } as ApiJson<T>;
+  }
+  return json as ApiJson<T>;
 }
 
 export const client = hc<AppType>(
@@ -642,7 +650,7 @@ export class WebPushState {
 
   async fetchVapidPublicKey(): Promise<string> {
     try {
-      const res = await client.api.devices['vapid-public-key'].$get();
+      const res = await client.api.vapid.$get();
       const data = await readApiJson(res);
       if (res.ok && data.success && data.data.publicKey) {
         this.vapidPublicKey = data.data.publicKey;

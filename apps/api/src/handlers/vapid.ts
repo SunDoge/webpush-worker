@@ -3,5 +3,5 @@ import type { PublicEnv } from '../types';
 
 const factory = createFactory<PublicEnv>();
 export const getVapidPublicKey = factory.createHandlers((c) => {
-  return c.json({ code: 'ok', data: { publickey: c.env.VAPID_PUBLIC_KEY } });
+  return c.json({ code: 'ok', data: { publicKey: c.env.VAPID_PUBLIC_KEY } });
 });
