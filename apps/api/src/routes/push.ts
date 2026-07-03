@@ -1,28 +1,23 @@
 import { sValidator } from '@hono/standard-validator';
-import { type Context, Hono } from 'hono';
+import { Hono } from 'hono';
 // @ts-expect-error
 import { generatePushHTTPRequest } from 'webpush-webcrypto';
 import { getDb } from '../db';
 import { authMiddleware } from '../middleware/auth';
-import { sendQuerySchema, sendSchema } from '../schemas';
+import { sendSchema } from '../schemas';
 import { loadVapidKeys, priorityToUrgency } from '../utils/vapid';
 
-type Bindings = {
-  DB: D1Database;
-  VAPID_PUBLIC_KEY: string;
-  VAPID_SECRET_KEY: string;
-};
+const pushRouter = new Hono<{ Bindings: CloudflareBindings }>();
 
-const pushRouter = new Hono<{ Bindings: Bindings }>();
-
-const handleSend = async (c: Context<{ Bindings: Bindings }>) => {
+// 依然在运行时注册 /send/:topic 接口，保证外部 CURL 定时任务等兼容性
+pushRouter.post('/send/:topic', authMiddleware, sValidator('json', sendSchema), async (c) => {
   const user = c.get('user' as any) as any;
   if (!user?.id) {
     return c.json({ success: false, error: 'User login required' }, 401);
   }
 
-  const topic = c.req.param('topic') || c.req.query('topic') || 'default';
-  const body = c.req.valid('json' as never) as any;
+  const topic = c.req.param('topic') || 'default';
+  const body = c.req.valid('json') as any;
 
   const title = body.title || '';
   const bodyText = body.body;
@@ -125,20 +120,8 @@ const handleSend = async (c: Context<{ Bindings: Bindings }>) => {
       },
     });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+    return c.json({ success: false, error: err.message as string }, 500);
   }
-};
+});
 
-// 依然在运行时注册 /send/:topic 接口，保证外部 CURL 定时任务等兼容性
-pushRouter.post('/send/:topic', authMiddleware, sValidator('json', sendSchema), handleSend);
-
-// 链式调用注册 /send，并通过 query 传递 topic
-const pushRouterChained = pushRouter.post(
-  '/send',
-  authMiddleware,
-  sValidator('query', sendQuerySchema),
-  sValidator('json', sendSchema),
-  handleSend,
-);
-
-export { pushRouterChained as pushRouter };
+export { pushRouter };

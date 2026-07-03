@@ -1,4 +1,5 @@
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { verify } from 'hono/jwt';
 import { getDb } from '../db';
 
@@ -77,12 +78,12 @@ export async function getAuthorizedUser(
   }
 }
 
-export const authMiddleware: MiddlewareHandler = async (c, next) => {
+export const authMiddleware = createMiddleware(async (c, next) => {
   const user = await getAuthorizedUser(c);
   if (!user) {
     return c.json({ success: false, error: 'Unauthorized' }, 401);
   }
   // 在 Hono 上下文中保存用户信息
-  c.set('user' as any, user);
+  c.set('user', user);
   await next();
-};
+});

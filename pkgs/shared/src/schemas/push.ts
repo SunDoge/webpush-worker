@@ -6,6 +6,8 @@ export const sendSchema = v.object({
   url: v.optional(v.string()),
   priority: v.optional(v.union([v.number(), v.string()])),
   tags: v.optional(v.string()),
+  timestamp: v.optional(v.string()),
+  sign: v.optional(v.string()),
 });
 
 export const sendQuerySchema = v.object({
