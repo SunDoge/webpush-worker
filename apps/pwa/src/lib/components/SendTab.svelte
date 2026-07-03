@@ -33,6 +33,7 @@ function copyText(text: string) {
 let curlCommand = $derived.by(() => {
   const baseUrl = window.location.origin;
   const tokenPart = appState.apiToken ? ` -H "Authorization: Bearer ${appState.apiToken}"` : '';
+  const topic = appState.sendTopic || 'default';
 
   const payload = {
     title: appState.sendTitle || undefined,
@@ -46,7 +47,7 @@ let curlCommand = $derived.by(() => {
 
   return `curl -X POST -H "Content-Type: application/json"${tokenPart} \\
   -d '${jsonStr.replace(/'/g, "'\\''")}' \\
-  ${baseUrl}/api/send/${appState.sendTopic}`;
+  ${baseUrl}/api/push/${topic}`;
 });
 </script>
 
@@ -54,10 +55,19 @@ let curlCommand = $derived.by(() => {
 <List strong inset>
   <ListInput
     label="目标主题 (Topic)"
-    type="text"
-    placeholder="例如: default"
+    type="select"
+    dropdown
     bind:value={appState.sendTopic}
-  />
+    disabled={appState.userTopics.length === 0}
+  >
+    {#if appState.userTopics.length === 0}
+      <option value="default">default</option>
+    {:else}
+      {#each appState.userTopics as topic}
+        <option value={topic.name}>{topic.name}</option>
+      {/each}
+    {/if}
+  </ListInput>
   <ListInput
     label="推送标题 (Title)"
     type="text"

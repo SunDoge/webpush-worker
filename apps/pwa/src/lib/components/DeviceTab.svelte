@@ -1,8 +1,8 @@
 <script lang="ts">
+import { createTopicSchema } from '@webpush-worker/shared';
 import {
   Badge,
   Block,
-  BlockFooter,
   BlockTitle,
   Button,
   Card,
@@ -11,6 +11,7 @@ import {
   ListInput,
   ListItem,
 } from 'konsta/svelte';
+import { safeParse } from 'valibot';
 import { formatDate } from '../utils';
 import type { WebPushState } from '../webpush-state.svelte';
 
@@ -22,25 +23,23 @@ let { appState }: Props = $props();
 
 // Local form state for new topic
 let newTopicName = $state('');
+let topicTouched = $state(false);
+
+const topicValidation = $derived(safeParse(createTopicSchema, { name: newTopicName.trim() }));
+const topicError = $derived(
+  topicTouched && !topicValidation.success ? (topicValidation.issues[0]?.message ?? null) : null,
+);
 
 async function handleCreateTopic() {
+  topicTouched = true;
+  if (!topicValidation.success) return;
   const cleanName = newTopicName.trim();
-  if (!cleanName) {
-    appState.showDialog('提示', '⚠️ 主题名称不能为空！');
-    return;
-  }
-  // 仅允许字母、数字、下划线、中划线
-  if (!/^[a-zA-Z0-9_-]+$/.test(cleanName)) {
-    appState.showDialog('提示', '⚠️ 主题名称仅允许包含字母、数字、下划线和中划线！');
-    return;
-  }
   const success = await appState.createTopic(cleanName);
   if (success) {
     newTopicName = '';
-    // 自动勾选并订阅该新创建的主题
+    topicTouched = false;
     if (!appState.selectedTopics.includes(cleanName)) {
       appState.selectedTopics = [...appState.selectedTopics, cleanName];
-      // 如果设备已经在云端注册，自动同步到服务器
       if (appState.isRegisteredOnServer) {
         await appState.subscribeDevice();
       }
@@ -155,31 +154,24 @@ async function handleCreateTopic() {
 
   <hr class="border-slate-100 dark:border-slate-800 my-0" />
 
-  <!-- Quick Add Topic Form inside Card -->
-  <Block class="my-0! py-4! bg-slate-50/50 dark:bg-slate-900/10">
-    <div class="flex items-end gap-3">
-      <div class="flex-1">
-        <label for="new-topic-input" class="block text-xs font-semibold text-slate-400 mb-1">新建推送主题</label>
-        <input
-          id="new-topic-input"
-          type="text"
-          placeholder="输入新主题名，如 home-assistant"
-          class="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-          bind:value={newTopicName}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') {
-              handleCreateTopic();
-            }
-          }}
-        />
-      </div>
-      <Button rounded class="h-10 px-4 w-auto shrink-0" onclick={handleCreateTopic}>
-        添加主题
-      </Button>
-    </div>
-    <p class="text-2xs text-slate-400 mt-2">
-      主题仅允许字母、数字、下划线和中划线。创建后，外部可通过 <code>/api/send/[主题名]</code> 发送通知。
-    </p>
+  <List nested class="my-0!">
+    <ListInput
+      label="新建推送主题"
+      type="text"
+      placeholder="如 home-assistant"
+      bind:value={newTopicName}
+      error={topicError ?? undefined}
+      info="仅允许字母、数字、下划线和中划线"
+      clearButton={newTopicName.length > 0}
+      onClear={() => { newTopicName = ''; topicTouched = false; }}
+      oninput={() => { topicTouched = true; }}
+      onkeydown={(e) => { if (e.key === 'Enter') handleCreateTopic(); }}
+    />
+  </List>
+  <Block class="my-0! pt-3! pb-4!">
+    <Button rounded class="w-full" onclick={handleCreateTopic}>
+      添加主题
+    </Button>
   </Block>
 </Card>
 
@@ -196,7 +188,6 @@ async function handleCreateTopic() {
       <ListItem
         title={dev.name}
         after={isSelf ? '本机' : ''}
-        subtitle={`订阅 Topic: ${dev.topics}`}
         text={`注册时间: ${formatDate(dev.created_at)}`}
       />
     {/each}

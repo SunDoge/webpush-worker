@@ -1,15 +1,15 @@
 import * as v from 'valibot';
 
 export const registerSchema = v.object({
-  username: v.pipe(v.string(), v.minLength(1, 'username cannot be empty')),
-  password: v.pipe(v.string(), v.minLength(1, 'password cannot be empty')),
+  username: v.pipe(v.string(), v.minLength(1, '用户名不能为空')),
+  password: v.pipe(v.string(), v.minLength(1, '密码不能为空')),
   code: v.optional(v.string()),
   turnstileToken: v.optional(v.string()),
 });
 
 export const loginSchema = v.object({
-  username: v.pipe(v.string(), v.minLength(1, 'username cannot be empty')),
-  password: v.pipe(v.string(), v.minLength(1, 'password cannot be empty')),
+  username: v.pipe(v.string(), v.minLength(1, '用户名不能为空')),
+  password: v.pipe(v.string(), v.minLength(1, '密码不能为空')),
   turnstileToken: v.optional(v.string()),
 });
 

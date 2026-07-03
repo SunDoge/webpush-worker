@@ -34,7 +34,7 @@ let curlCommand = $derived.by(() => {
 
   return `curl -X POST${tokenPart}${headerTitle}${headerClick}${headerPriority}${headerTags} \\
   -d "${sendBody || 'Hello from terminal!'}" \\
-  ${baseUrl}/api/send/${sendTopic}`;
+  ${baseUrl}/api/push/${sendTopic}`;
 });
 </script>
 

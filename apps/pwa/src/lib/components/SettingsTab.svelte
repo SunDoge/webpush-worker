@@ -1,6 +1,6 @@
 <script lang="ts">
+import { Check, Key, Trash2 } from '@lucide/svelte';
 import {
-  Badge,
   Block,
   BlockFooter,
   BlockTitle,
@@ -143,34 +143,44 @@ function copyInvitationCode(code: string) {
   {#if appState.invitationCodesList.length > 0}
     <List strong inset>
       {#each appState.invitationCodesList as inv}
+        {@const isUsed = inv.status !== 'pending'}
         <ListItem
-          title={`🔑 ${inv.code}`}
-          subtitle={inv.status === 'used'
-            ? `使用者: ${inv.recipient_username || '未知'} • ${formatDate(inv.used_at || 0)}`
-            : `创建于: ${formatDate(inv.created_at)}`}
-          onclick={() => copyInvitationCode(inv.code)}
-          class="cursor-pointer font-mono"
+          title={inv.code}
+          titleWrapClass="font-mono {isUsed ? 'line-through opacity-50' : ''}"
+          onclick={() => !isUsed && copyInvitationCode(inv.code)}
+          class={isUsed ? '' : 'cursor-pointer'}
         >
+          {#snippet media()}
+            <div class="w-8 h-8 rounded-full flex items-center justify-center {isUsed ? 'bg-slate-800 text-slate-500' : 'bg-emerald-500/10 text-emerald-400'}">
+              {#if isUsed}
+                <Check size="15" />
+              {:else}
+                <Key size="15" />
+              {/if}
+            </div>
+          {/snippet}
+          {#snippet text()}
+            {#if isUsed}
+              <span>已被 {inv.recipient_username || '未知用户'} 使用 · {formatDate(inv.used_at || 0)}</span>
+            {:else}
+              <span>创建于 {formatDate(inv.created_at)} · 点击复制</span>
+            {/if}
+          {/snippet}
           {#snippet after()}
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
               {#if copiedInvitationCode === inv.code}
                 <span class="text-[9px] text-emerald-400">已复制!</span>
               {/if}
-              {#if inv.status === 'pending'}
-                <Badge colors={{ bg: 'bg-emerald-500/10 text-emerald-400' }} class="text-[9px] border border-emerald-500/20">
-                  未使用
-                </Badge>
+              {#if !isUsed}
                 <Button
-                  clear small
+                  clear small inline
                   onclick={(e) => { e.stopPropagation(); appState.revokeInvitationCode(inv.code); }}
                   colors={{ textIos: 'text-red-400', textMaterial: 'text-red-400' }}
+                  class="p-2!"
+                  aria-label="删除邀请码"
                 >
-                  删除
+                  <Trash2 size="15" />
                 </Button>
-              {:else}
-                <Badge colors={{ bg: 'bg-slate-800 text-slate-400' }} class="text-[9px] border border-slate-700/30">
-                  已使用
-                </Badge>
               {/if}
             </div>
           {/snippet}

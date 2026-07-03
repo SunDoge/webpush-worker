@@ -1,38 +1,37 @@
+/// <reference path="../worker-configuration.d.ts" />
+
 import { Hono } from 'hono';
 import { authRouter } from './routes/auth';
-import { devicesRouter } from './routes/devices';
+// import { devicesRouter } from './routes/devices';
 import { pushRouter } from './routes/push';
 import { topicsRouter } from './routes/topics';
+import * as deviceHandler from './handlers/device';
+import { AuthEnv, PublicEnv } from './types';
+import { getBunServer } from 'hono/bun';
+import { authMiddleware } from './middleware/auth';
+import { getVapidPublicKey } from './handlers/vapid';
 
-const app = new Hono<{ Bindings: CloudflareBindings }>();
+const app = new Hono<PublicEnv>();
 
-// CORS Middleware
-// app.use(
-//   '*',
-//   cors({
-//     origin: (origin) => origin, // 允许所有来源跨域，以便各种端点调用
-//     allowHeaders: [
-//       'Content-Type',
-//       'Authorization',
-//       'Title',
-//       'Priority',
-//       'Click',
-//       'Tags',
-//       'X-Token',
-//     ],
-//     allowMethods: ['POST', 'GET', 'OPTIONS', 'DELETE'],
-//     exposeHeaders: ['Content-Length'],
-//     maxAge: 600,
-//     credentials: true,
-//   }),
-// );
+// Route map — each sub-router owns its prefix so paths never collide:
+//
+//   /api/auth/*        → authRouter
+//   /api/devices/*     → devicesRouter
+//   /api/push/:topic   → pushRouter
+//   /api/topics/*      → topicsRouter
 
-// Mount sub-routers
+const deviceRouter = new Hono<PublicEnv>()
+  .use(authMiddleware)
+  .get('/', ...deviceHandler.listDevices)
+  .post('/subscribe', ...deviceHandler.subscribeDevice)
+  .delete('/:id', ...deviceHandler.deleteDevice);
+
 const routes = app
-  .route('/api', authRouter)
-  .route('/api', devicesRouter)
-  .route('/api', pushRouter)
-  .route('/api', topicsRouter);
+  .get('/api/vapid', ...getVapidPublicKey)
+  .route('/api/auth', authRouter)
+  .route('/api/devices', deviceRouter)
+  .route('/api/push', pushRouter)
+  .route('/api/topics', topicsRouter);
 
 export type AppType = typeof routes;
 export default app;

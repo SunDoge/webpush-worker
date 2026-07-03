@@ -6,6 +6,7 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "types": ["svelte", "vite/client"],
+    "strict": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",

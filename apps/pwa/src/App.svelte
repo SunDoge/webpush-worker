@@ -52,7 +52,7 @@ onMount(() => {
     <!-- Global Dialog Modal / Confirm -->
     <Dialog opened={appState.dialogOpened} onBackdropClick={() => appState.dialogOpened = false} class="z-50">
       {#snippet title()}{appState.dialogTitle}{/snippet}
-      <div class="text-sm text-slate-300 whitespace-pre-wrap">{appState.dialogMessage}</div>
+      <div class="text-sm whitespace-pre-wrap">{appState.dialogMessage}</div>
       {#snippet buttons()}
         {#if appState.dialogConfirmCallback}
           <DialogButton onclick={() => { appState.dialogOpened = false; appState.dialogConfirmCallback?.(); }} strong>

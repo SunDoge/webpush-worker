@@ -4,6 +4,16 @@ import { db } from './db';
 
 let stateInstance: WebPushState | null = null;
 
+type ApiJson<T = any> = {
+  success: boolean;
+  data?: T;
+  error?: unknown;
+};
+
+export async function readApiJson<T = any>(res: { json(): Promise<unknown> }): Promise<ApiJson<T>> {
+  return (await res.json()) as ApiJson<T>;
+}
+
 export const client = hc<AppType>(
   typeof window !== 'undefined' ? window.location.origin : 'http://localhost',
   {
@@ -380,12 +390,10 @@ export class WebPushState {
       this.localEndpoint = sub.endpoint;
 
       const subJson = sub.toJSON();
-      const hashedId = btoa(sub.endpoint).replace(/=/g, '').slice(-16);
 
-      const res = await client.api.subscribe.$post(
+      const res = await client.api.devices.subscribe.$post(
         {
           json: {
-            id: hashedId,
             name: this.deviceName,
             endpoint: sub.endpoint,
             subscription: {
@@ -405,7 +413,7 @@ export class WebPushState {
         },
       );
 
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         this.isRegisteredOnServer = true;
         this.showToast('🎉 设备订阅注册成功！');
@@ -427,9 +435,14 @@ export class WebPushState {
 
     this.showConfirm('注销设备', '确定要注销此设备的推送通知吗？', async () => {
       try {
-        const res = await client.api.unsubscribe.$post(
+        const deviceId = this.devicesList.find((d) => d.endpoint === this.localEndpoint)?.id;
+        if (!deviceId) {
+          this.showDialog('注销失败', '❌ 未找到本机设备记录，请刷新后重试');
+          return;
+        }
+        const res = await client.api.devices[':id'].$delete(
           {
-            json: { endpoint: this.localEndpoint! },
+            param: { id: deviceId },
           },
           {
             headers: {
@@ -438,7 +451,7 @@ export class WebPushState {
           },
         );
 
-        const data = await res.json();
+        const data = await readApiJson(res);
         if (res.ok && data.success) {
           const registration = await this.getSWRegistration();
           const sub = await registration.pushManager.getSubscription();
@@ -471,7 +484,7 @@ export class WebPushState {
         },
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await readApiJson(res);
         if (data.success) {
           this.devicesList = data.data || [];
           this.checkServerRegistration();
@@ -497,9 +510,9 @@ export class WebPushState {
     this.sendStatus = { success: false, message: '' };
 
     try {
-      const res = await client.api.send.$post(
+      const res = await client.api.push[':topic'].$post(
         {
-          query: { topic: this.sendTopic },
+          param: { topic: this.sendTopic || 'default' },
           json: {
             title: this.sendTitle || undefined,
             body: this.sendBody,
@@ -515,11 +528,11 @@ export class WebPushState {
         },
       );
 
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         this.sendStatus = {
           success: true,
-          message: `🚀 已成功投递给 ${data.data.successCount} 台设备（失败: ${data.data.failCount}）。`,
+          message: `🚀 已向 ${data.data.sent} 台设备发起推送。`,
         };
 
         // Save the sent notification locally in Dexie IndexedDB
@@ -569,7 +582,7 @@ export class WebPushState {
       const res = await client.api.auth.login.$post({
         json: { username, password, turnstileToken },
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         this.sessionToken = data.data.token; // JWT，仅用于 API 请求
         this.refreshToken = data.data.refreshToken;
@@ -594,7 +607,7 @@ export class WebPushState {
       const res = await client.api.auth.register.$post({
         json: { username, password, code: code || undefined, turnstileToken },
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         this.sessionToken = data.data.token; // JWT，仅用于 API 请求
         this.refreshToken = data.data.refreshToken;
@@ -629,8 +642,8 @@ export class WebPushState {
 
   async fetchVapidPublicKey(): Promise<string> {
     try {
-      const res = await client.api['vapid-public-key'].$get();
-      const data = await res.json();
+      const res = await client.api.devices['vapid-public-key'].$get();
+      const data = await readApiJson(res);
       if (res.ok && data.success && data.data.publicKey) {
         this.vapidPublicKey = data.data.publicKey;
         localStorage.setItem('webpush_vapid_public_key', this.vapidPublicKey);
@@ -648,7 +661,7 @@ export class WebPushState {
       const res = await client.api.auth.refresh.$post({
         json: { refreshToken: this.refreshToken },
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         this.sessionToken = data.data.token;
         this.refreshToken = data.data.refreshToken;
@@ -676,7 +689,7 @@ export class WebPushState {
         },
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await readApiJson(res);
         if (data.success) {
           this.apiTokensList = data.data || [];
         }
@@ -698,7 +711,7 @@ export class WebPushState {
           },
         },
       );
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         await this.fetchApiTokens();
         this.showToast('🎉 Token 生成成功！');
@@ -731,7 +744,7 @@ export class WebPushState {
               },
             },
           );
-          const data = await res.json();
+          const data = await readApiJson(res);
           if (res.ok && data.success) {
             this.showToast('🎉 Token 已注销！');
             await this.fetchApiTokens();
@@ -756,7 +769,7 @@ export class WebPushState {
         },
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await readApiJson(res);
         if (data.success) {
           this.invitationCodesList = data.data || [];
         }
@@ -773,7 +786,7 @@ export class WebPushState {
           Authorization: `Bearer ${this.authToken}`,
         },
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         await this.fetchInvitationCodes();
         this.showToast('🎉 邀请码生成成功！');
@@ -800,7 +813,7 @@ export class WebPushState {
             },
           },
         );
-        const data = await res.json();
+        const data = await readApiJson(res);
         if (res.ok && data.success) {
           this.showToast('🎉 邀请码已废销！');
           await this.fetchInvitationCodes();
@@ -824,9 +837,13 @@ export class WebPushState {
         },
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await readApiJson(res);
         if (data.success) {
           this.userTopics = data.data || [];
+          const topicNames = this.userTopics.map((topic) => topic.name);
+          if (topicNames.length > 0 && !topicNames.includes(this.sendTopic)) {
+            this.sendTopic = topicNames.includes('default') ? 'default' : topicNames[0];
+          }
         }
       }
     } catch (err) {
@@ -847,7 +864,7 @@ export class WebPushState {
           },
         },
       );
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (res.ok && data.success) {
         this.showToast('🎉 主题创建成功！');
         await this.fetchTopics();
@@ -884,11 +901,16 @@ export class WebPushState {
               },
             },
           );
-          const data = await res.json();
+          const data = await readApiJson(res);
           if (res.ok && data.success) {
             this.showToast(`🎉 主题 "${name}" 已成功删除！`);
             this.selectedTopics = this.selectedTopics.filter((t) => t !== name);
             await this.fetchTopics();
+            if (this.sendTopic === name) {
+              this.sendTopic = this.userTopics.some((topic) => topic.name === 'default')
+                ? 'default'
+                : (this.userTopics[0]?.name ?? 'default');
+            }
           } else {
             const errMsg = this.formatError(data);
             this.showDialog('删除失败', `❌ 删除主题失败: ${errMsg}`);

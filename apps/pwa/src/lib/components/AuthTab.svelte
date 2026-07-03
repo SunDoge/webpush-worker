@@ -1,4 +1,5 @@
 <script lang="ts">
+import { loginSchema, registerSchema } from '@webpush-worker/shared';
 import {
   Block,
   BlockTitle,
@@ -10,8 +11,9 @@ import {
   SegmentedButton,
 } from 'konsta/svelte';
 import { onMount } from 'svelte';
+import { safeParse } from 'valibot';
 import type { WebPushState } from '../webpush-state.svelte';
-import { client } from '../webpush-state.svelte';
+import { client, readApiJson } from '../webpush-state.svelte';
 
 interface Props {
   appState: WebPushState;
@@ -24,6 +26,22 @@ let authUsername = $state('');
 let authPassword = $state('');
 let authInvitationCode = $state('');
 let isLoginMode = $state(true); // true = login, false = register
+let submitted = $state(false); // 首次提交后才显示错误
+
+const authValidation = $derived(
+  isLoginMode
+    ? safeParse(loginSchema, { username: authUsername, password: authPassword })
+    : safeParse(registerSchema, {
+        username: authUsername,
+        password: authPassword,
+        code: authInvitationCode || undefined,
+      }),
+);
+
+function fieldError(field: string): string | null {
+  if (!submitted || authValidation.success) return null;
+  return authValidation.issues.find((i) => i.path?.[0]?.key === field)?.message ?? null;
+}
 
 // Check if first user registration (setup status)
 let hasUsers = $state(true);
@@ -81,7 +99,7 @@ onMount(async () => {
   try {
     const res = await client.api.auth['setup-status'].$get();
     if (res.ok) {
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (data.success) {
         hasUsers = data.data.hasUsers;
         appState.turnstileSiteKey = data.data.turnstileSiteKey;
@@ -92,24 +110,27 @@ onMount(async () => {
   }
 });
 
-async function handleAuth() {
-  if (!authUsername || !authPassword) {
-    appState.showDialog('提示', '⚠️ 请输入用户名和密码！');
-    return;
+function resetTurnstile() {
+  if (turnstileWidgetId !== null && (window as any).turnstile) {
+    (window as any).turnstile.reset(turnstileWidgetId);
+    turnstileToken = '';
   }
+}
+
+async function handleAuth() {
+  submitted = true;
+  if (!authValidation.success) return;
+
   if (isLoginMode) {
     const res = await appState.login(authUsername, authPassword, turnstileToken);
     if (res.success) {
       authUsername = '';
       authPassword = '';
+      submitted = false;
     } else {
-      if (turnstileWidgetId !== null && (window as any).turnstile) {
-        (window as any).turnstile.reset(turnstileWidgetId);
-        turnstileToken = '';
-      }
+      resetTurnstile();
     }
   } else {
-    // 注册时，若已存在其他用户才需要邀请码验证，首位注册直接允许空邀请码
     if (hasUsers && !authInvitationCode.trim()) {
       appState.showDialog('提示', '⚠️ 请输入注册邀请码！');
       return;
@@ -124,13 +145,10 @@ async function handleAuth() {
       authUsername = '';
       authPassword = '';
       authInvitationCode = '';
-      // 登录成功后重新查询状态
+      submitted = false;
       hasUsers = true;
     } else {
-      if (turnstileWidgetId !== null && (window as any).turnstile) {
-        (window as any).turnstile.reset(turnstileWidgetId);
-        turnstileToken = '';
-      }
+      resetTurnstile();
     }
   }
 }
@@ -141,10 +159,10 @@ async function handleAuth() {
 <Card outline>
   <Block class="space-y-4">
     <Segmented strong rounded>
-      <SegmentedButton active={isLoginMode} onclick={() => isLoginMode = true}>
+      <SegmentedButton active={isLoginMode} onclick={() => { isLoginMode = true; submitted = false; }}>
         用户登录
       </SegmentedButton>
-      <SegmentedButton active={!isLoginMode} onclick={() => isLoginMode = false}>
+      <SegmentedButton active={!isLoginMode} onclick={() => { isLoginMode = false; submitted = false; }}>
         注册账户
       </SegmentedButton>
     </Segmented>
@@ -153,14 +171,16 @@ async function handleAuth() {
       <ListInput
         label="用户名"
         type="text"
-        placeholder="请输入用户名 (至少 3 位)"
+        placeholder="请输入用户名"
         bind:value={authUsername}
+        error={fieldError('username') ?? undefined}
       />
       <ListInput
         label="密码"
         type="password"
-        placeholder="请输入密码 (至少 6 位)"
+        placeholder="请输入密码"
         bind:value={authPassword}
+        error={fieldError('password') ?? undefined}
       />
       {#if !isLoginMode && hasUsers}
         <ListInput
