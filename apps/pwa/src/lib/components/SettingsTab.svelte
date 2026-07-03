@@ -228,7 +228,9 @@ function copyInvitationCode(code: string) {
   </ListInput>
 </List>
 
-<BlockFooter class="text-center">
-  WebPush Console PWA {__APP_VERSION__}<br />
-  配置将保存在您的本地浏览器中 (LocalStorage)。
+<BlockFooter class="justify-center text-center">
+  <div class="text-center">
+    WebPush Console PWA {__APP_VERSION__}<br />
+    配置将保存在您的本地浏览器中 (LocalStorage)。
+  </div>
 </BlockFooter>

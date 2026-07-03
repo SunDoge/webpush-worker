@@ -80,7 +80,7 @@ export async function getAuthorizedUser(c: Context<AuthEnv>): Promise<UserInfo |
 export const authMiddleware = createMiddleware(async (c, next) => {
   const user = await getAuthorizedUser(c);
   if (!user) {
-    return c.json({ success: false, error: 'Unauthorized' }, 401);
+    return c.json({ code: 'unauthorized', msg: 'Unauthorized, please login first' }, 401);
   }
   // 在 Hono 上下文中保存用户信息
   c.set('user', user);
