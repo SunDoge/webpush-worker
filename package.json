@@ -25,5 +25,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2"
+  },
+  "dependencies": {
+    "ts-pattern": "^5.9.0"
   }
 }

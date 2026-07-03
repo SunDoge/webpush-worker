@@ -11,14 +11,14 @@ import { verifyTurnstile } from '../utils/turnstile';
 const factory = createFactory<PublicEnv>();
 
 export const getSetupStatus = factory.createHandlers(async (c) => {
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
   const result = await db
     .selectFrom('users')
     .select((eb) => eb.fn.count<number>('id').as('count'))
     .executeTakeFirst();
 
   return c.json({
-    code: 'ok',
+    code: 'ok' as const,
     data: {
       hasUsers: (result?.count ?? 0) > 0,
       turnstileSiteKey: c.env.TURNSTILE_SITE_KEY || null,
@@ -29,13 +29,16 @@ export const getSetupStatus = factory.createHandlers(async (c) => {
 export const registerUser = factory.createHandlers(
   sValidator('json', registerSchema),
   async (c) => {
-    const db = getDb(c.env.DB);
+    const { db, dialect } = getDb(c.env.DB);
     const { username, password, code, turnstileToken } = c.req.valid('json') as any;
 
     const ip = c.req.header('CF-Connecting-IP');
     const isHuman = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET_KEY, ip);
     if (!isHuman) {
-      return c.json({ code: 'turnstile_failed', msg: 'Turnstile verification failed' }, 400);
+      return c.json(
+        { code: 'turnstile_failed' as const, msg: 'Turnstile verification failed' },
+        400,
+      );
     }
 
     const existing = await db
@@ -45,7 +48,7 @@ export const registerUser = factory.createHandlers(
       .executeTakeFirst();
 
     if (existing) {
-      return c.json({ code: 'user_already_exists', msg: 'Username already exists' }, 400);
+      return c.json({ code: 'user_already_exists' as const, msg: 'Username already exists' }, 400);
     }
 
     const countResult = await db
@@ -61,7 +64,7 @@ export const registerUser = factory.createHandlers(
     if (userCount > 0) {
       if (!code) {
         return c.json(
-          { code: 'invitation_invalid', msg: 'Invitation code is required to register' },
+          { code: 'invitation_invalid' as const, msg: 'Invitation code is required to register' },
           400,
         );
       }
@@ -75,7 +78,7 @@ export const registerUser = factory.createHandlers(
 
       if (!inv) {
         return c.json(
-          { code: 'invitation_invalid', msg: 'Invalid or already used invitation code' },
+          { code: 'invitation_invalid' as const, msg: 'Invalid or already used invitation code' },
           400,
         );
       }
@@ -86,34 +89,38 @@ export const registerUser = factory.createHandlers(
     const userId = crypto.randomUUID();
     const createdAt = Math.floor(Date.now() / 1000);
 
-    await db
+    const q1 = db
       .insertInto('users')
-      .values({ id: userId, username, password_hash: passwordHash, role, created_at: createdAt })
-      .execute();
+      .values({ id: userId, username, password_hash: passwordHash, role, created_at: createdAt });
 
-    // Every new user gets a built-in 'default' topic that cannot be deleted
-    await db
+    const q2 = db
       .insertInto('user_topics')
-      .values({ user_id: userId, name: 'default', created_at: createdAt })
-      .execute();
+      .values({ user_id: userId, name: 'default', created_at: createdAt });
+
+    const queries = [q1.compile(), q2.compile()];
 
     if (matchedCode) {
-      await db
+      const q3 = db
         .updateTable('invitation_codes')
-        .set({ status: 'used', used_by: userId, used_at: createdAt })
-        .where('code', '=', matchedCode)
-        .execute();
+        .set({ status: 'used' as const, used_by: userId, used_at: createdAt })
+        .where('code', '=', matchedCode);
+      queries.push(q3.compile());
     }
+
+    await dialect.batch(queries);
 
     const jwtSecret = c.env.JWT_SECRET;
     if (!jwtSecret) {
-      return c.json({ code: 'server_misconfiguration', msg: 'Server misconfiguration' }, 500);
+      return c.json(
+        { code: 'server_misconfiguration' as const, msg: 'Server misconfiguration' },
+        500,
+      );
     }
 
     const tokens = await issueTokenPair({ id: userId, username, role }, jwtSecret);
 
     return c.json({
-      code: 'ok',
+      code: 'ok' as const,
       data: {
         user: { id: userId, username, role, created_at: createdAt },
         ...tokens,
@@ -123,13 +130,13 @@ export const registerUser = factory.createHandlers(
 );
 
 export const loginUser = factory.createHandlers(sValidator('json', loginSchema), async (c) => {
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
   const { username, password, turnstileToken } = c.req.valid('json') as any;
 
   const ip = c.req.header('CF-Connecting-IP');
   const isHuman = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET_KEY, ip);
   if (!isHuman) {
-    return c.json({ code: 'turnstile_failed', msg: 'Turnstile verification failed' }, 400);
+    return c.json({ code: 'turnstile_failed' as const, msg: 'Turnstile verification failed' }, 400);
   }
 
   const user = await db
@@ -139,12 +146,15 @@ export const loginUser = factory.createHandlers(sValidator('json', loginSchema),
     .executeTakeFirst();
 
   if (!user || !(await verifyPassword(password, user.password_hash))) {
-    return c.json({ code: 'unauthorized', msg: 'Invalid username or password' }, 401);
+    return c.json({ code: 'unauthorized' as const, msg: 'Invalid username or password' }, 401);
   }
 
   const jwtSecret = c.env.JWT_SECRET;
   if (!jwtSecret) {
-    return c.json({ code: 'server_misconfiguration', msg: 'Server misconfiguration' }, 500);
+    return c.json(
+      { code: 'server_misconfiguration' as const, msg: 'Server misconfiguration' },
+      500,
+    );
   }
 
   const tokens = await issueTokenPair(
@@ -153,7 +163,7 @@ export const loginUser = factory.createHandlers(sValidator('json', loginSchema),
   );
 
   return c.json({
-    code: 'ok',
+    code: 'ok' as const,
     data: {
       user: {
         id: user.id,
@@ -170,18 +180,21 @@ export const refreshToken = factory.createHandlers(sValidator('json', refreshSch
   const { refreshToken: clientToken } = c.req.valid('json') as any;
   const jwtSecret = c.env.JWT_SECRET;
   if (!jwtSecret) {
-    return c.json({ code: 'server_misconfiguration', msg: 'Server misconfiguration' }, 500);
+    return c.json(
+      { code: 'server_misconfiguration' as const, msg: 'Server misconfiguration' },
+      500,
+    );
   }
 
   let payload: any;
   try {
     payload = await verify(clientToken, jwtSecret, 'HS256');
   } catch {
-    return c.json({ code: 'unauthorized', msg: 'Invalid or expired refresh token' }, 401);
+    return c.json({ code: 'unauthorized' as const, msg: 'Invalid or expired refresh token' }, 401);
   }
 
   if (!payload.is_refresh_token) {
-    return c.json({ code: 'invalid_params', msg: 'Not a valid refresh token' }, 400);
+    return c.json({ code: 'invalid_params' as const, msg: 'Not a valid refresh token' }, 400);
   }
 
   const tokens = await issueTokenPair(
@@ -189,5 +202,5 @@ export const refreshToken = factory.createHandlers(sValidator('json', refreshSch
     jwtSecret,
   );
 
-  return c.json({ code: 'ok', data: tokens });
+  return c.json({ code: 'ok' as const, data: tokens });
 });

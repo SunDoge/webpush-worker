@@ -7,10 +7,10 @@ const factory = createFactory<AuthEnv>();
 export const createInvitation = factory.createHandlers(async (c) => {
   const user = c.var.user;
   if (user.role !== 'admin') {
-    return c.json({ code: 'forbidden', msg: 'Admin role required' }, 403);
+    return c.json({ code: 'forbidden' as const, msg: 'Admin role required' }, 403);
   }
 
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
   const genSeg = () => Math.random().toString(36).substring(2, 6).toUpperCase();
   const code = `INV-${genSeg()}-${genSeg()}`;
   const createdAt = Math.floor(Date.now() / 1000);
@@ -20,16 +20,16 @@ export const createInvitation = factory.createHandlers(async (c) => {
     .values({ code, created_by: user.id, status: 'pending', created_at: createdAt })
     .execute();
 
-  return c.json({ code: 'ok', data: { code, created_at: createdAt, status: 'pending' } });
+  return c.json({ code: 'ok' as const, data: { code, created_at: createdAt, status: 'pending' } });
 });
 
 export const listInvitations = factory.createHandlers(async (c) => {
   const user = c.var.user;
   if (user.role !== 'admin') {
-    return c.json({ code: 'forbidden', msg: 'Admin role required' }, 403);
+    return c.json({ code: 'forbidden' as const, msg: 'Admin role required' }, 403);
   }
 
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
   const list = await db
     .selectFrom('invitation_codes')
     .leftJoin('users as creator', 'invitation_codes.created_by', 'creator.id')
@@ -45,20 +45,20 @@ export const listInvitations = factory.createHandlers(async (c) => {
     .orderBy('invitation_codes.created_at', 'desc')
     .execute();
 
-  return c.json({ code: 'ok', data: list });
+  return c.json({ code: 'ok' as const, data: list });
 });
 
 export const revokeInvitation = factory.createHandlers(async (c) => {
   const user = c.var.user;
   if (user.role !== 'admin') {
-    return c.json({ code: 'forbidden', msg: 'Admin role required' }, 403);
+    return c.json({ code: 'forbidden' as const, msg: 'Admin role required' }, 403);
   }
 
   const code = c.req.param('code');
   if (!code) {
-    return c.json({ code: 'invalid_params', msg: 'Code parameter is required' }, 400);
+    return c.json({ code: 'invalid_params' as const, msg: 'Code parameter is required' }, 400);
   }
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   await db
     .deleteFrom('invitation_codes')
@@ -66,5 +66,5 @@ export const revokeInvitation = factory.createHandlers(async (c) => {
     .where('status', '=', 'pending')
     .execute();
 
-  return c.json({ code: 'ok', data: null });
+  return c.json({ code: 'ok' as const, data: null });
 });

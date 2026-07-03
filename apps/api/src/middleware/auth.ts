@@ -21,7 +21,7 @@ export async function getAuthorizedUser(c: Context<AuthEnv>): Promise<UserInfo |
   // 1. 尝试验证不透明的本地 API Token (wpt_ 开头)
   if (token.startsWith('wpt_')) {
     try {
-      const db = getDb(c.env.DB);
+      const { db } = getDb(c.env.DB);
       const encoder = new TextEncoder();
       const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(token));
       const tokenHash = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
@@ -80,7 +80,7 @@ export async function getAuthorizedUser(c: Context<AuthEnv>): Promise<UserInfo |
 export const authMiddleware = createMiddleware(async (c, next) => {
   const user = await getAuthorizedUser(c);
   if (!user) {
-    return c.json({ code: 'unauthorized', msg: 'Unauthorized, please login first' }, 401);
+    return c.json({ code: 'unauthorized' as const, msg: 'Unauthorized, please login first' }, 401);
   }
   // 在 Hono 上下文中保存用户信息
   c.set('user', user);

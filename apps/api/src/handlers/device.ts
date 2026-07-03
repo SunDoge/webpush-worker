@@ -8,7 +8,7 @@ const factory = createFactory<AuthEnv>();
 
 export const listDevices = factory.createHandlers(async (c) => {
   const user = c.var.user;
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   const data = await db
     .selectFrom('devices')
@@ -17,14 +17,15 @@ export const listDevices = factory.createHandlers(async (c) => {
     .orderBy('last_seen_at', 'desc')
     .execute();
 
-  return c.json({ code: 'ok', data });
+  return c.json({ code: 'ok' as const, data });
 });
 
 export const subscribeDevice = factory.createHandlers(
   sValidator('json', subscribeSchema),
   async (c) => {
     const user = c.var.user;
-    const db = getDb(c.env.DB);
+    const { db, dialect } = getDb(c.env.DB);
+
     const body = c.req.valid('json') as any;
 
     const subStr =
@@ -47,7 +48,7 @@ export const subscribeDevice = factory.createHandlers(
     const unknownTopics = topicsArray.filter((t: string) => !existingNames.has(t));
     if (unknownTopics.length > 0) {
       return c.json(
-        { code: 'invalid_params', msg: `Unknown topics: ${unknownTopics.join(', ')}` },
+        { code: 'invalid_params' as const, msg: `Unknown topics: ${unknownTopics.join(', ')}` },
         400,
       );
     }
@@ -62,37 +63,50 @@ export const subscribeDevice = factory.createHandlers(
 
     const deviceId = existing?.id ?? crypto.randomUUID();
 
+    const queries = [];
+
     if (existing) {
-      await db
-        .updateTable('devices')
-        .set({ name: body.name, subscription: subStr, last_seen_at: Math.floor(Date.now() / 1000) })
-        .where('id', '=', deviceId)
-        .execute();
+      queries.push(
+        db
+          .updateTable('devices')
+          .set({
+            name: body.name,
+            subscription: subStr,
+            last_seen_at: Math.floor(Date.now() / 1000),
+          })
+          .where('id', '=', deviceId)
+          .compile(),
+      );
     } else {
-      await db
-        .insertInto('devices')
-        .values({
-          id: deviceId,
-          user_id: user.id,
-          name: body.name,
-          endpoint: body.endpoint,
-          subscription: subStr,
-          last_seen_at: Math.floor(Date.now() / 1000),
-        })
-        .execute();
+      queries.push(
+        db
+          .insertInto('devices')
+          .values({
+            id: deviceId,
+            user_id: user.id,
+            name: body.name,
+            endpoint: body.endpoint,
+            subscription: subStr,
+            last_seen_at: Math.floor(Date.now() / 1000),
+          })
+          .compile(),
+      );
     }
 
-    // Replace topic associations
-    await db.deleteFrom('device_topics').where('device_id', '=', deviceId).execute();
+    queries.push(db.deleteFrom('device_topics').where('device_id', '=', deviceId).compile());
 
     if (topicsArray.length > 0) {
-      await db
-        .insertInto('device_topics')
-        .values(topicsArray.map((topic: string) => ({ device_id: deviceId, topic })))
-        .execute();
+      queries.push(
+        db
+          .insertInto('device_topics')
+          .values(topicsArray.map((topic: string) => ({ device_id: deviceId, topic })))
+          .compile(),
+      );
     }
 
-    return c.json({ code: 'ok', data: { id: deviceId } });
+    await dialect.batch(queries);
+
+    return c.json({ code: 'ok' as const, data: { id: deviceId } });
   },
 );
 
@@ -100,11 +114,11 @@ export const deleteDevice = factory.createHandlers(async (c) => {
   const user = c.var.user;
   const id = c.req.param('id');
   if (!id) {
-    return c.json({ code: 'invalid_params', msg: 'ID parameter is required' }, 400);
+    return c.json({ code: 'invalid_params' as const, msg: 'ID parameter is required' }, 400);
   }
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   await db.deleteFrom('devices').where('id', '=', id).where('user_id', '=', user.id).execute();
 
-  return c.json({ code: 'ok', data: null });
+  return c.json({ code: 'ok' as const, data: null });
 });

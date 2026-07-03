@@ -18,7 +18,7 @@ app.onError((err, c) => {
   console.error('[Unhandled Error]', err);
   return c.json(
     {
-      code: 'internal_server_error',
+      code: 'internal_server_error' as const,
       msg: 'Internal server error',
     },
     500,

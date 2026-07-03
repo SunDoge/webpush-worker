@@ -1,26 +1,9 @@
 import type { AppType } from '@webpush-worker/api';
 import { hc } from 'hono/client';
+import { match } from 'ts-pattern';
 import { db } from './db';
 
 let stateInstance: WebPushState | null = null;
-
-type ApiJson<T = any> = {
-  success: boolean;
-  data?: T;
-  error?: unknown;
-};
-
-export async function readApiJson<T = any>(res: { json(): Promise<unknown> }): Promise<ApiJson<T>> {
-  const json = (await res.json()) as any;
-  if (json && typeof json === 'object' && 'code' in json) {
-    return {
-      success: json.code === 'ok',
-      data: json.data,
-      error: json.message || json.code,
-    } as ApiJson<T>;
-  }
-  return json as ApiJson<T>;
-}
 
 export const client = hc<AppType>(
   typeof window !== 'undefined' ? window.location.origin : 'http://localhost',
@@ -51,6 +34,24 @@ export const client = hc<AppType>(
     },
   },
 );
+
+// unwrap 直接返回带类型的 json，不抛出异常。若 HTTP 状态出错则自动转为错误 JSON。
+export async function unwrap<R extends { ok: boolean; status: number; json(): Promise<any> }>(
+  responsePromise: Promise<R>,
+): Promise<Awaited<ReturnType<R['json']>>> {
+  const res = await responsePromise;
+  if (!res.ok) {
+    try {
+      return await res.json();
+    } catch {
+      return {
+        code: 'internal_server_error',
+        msg: `HTTP Error ${res.status}`,
+      } as any;
+    }
+  }
+  return res.json();
+}
 
 export class WebPushState {
   // Config state (stored in localStorage)
@@ -399,35 +400,36 @@ export class WebPushState {
 
       const subJson = sub.toJSON();
 
-      const res = await client.api.devices.subscribe.$post(
-        {
-          json: {
-            name: this.deviceName,
-            endpoint: sub.endpoint,
-            subscription: {
+      const result = await unwrap(
+        client.api.devices.subscribe.$post(
+          {
+            json: {
+              name: this.deviceName,
               endpoint: sub.endpoint,
-              keys: {
-                p256dh: subJson.keys?.p256dh || '',
-                auth: subJson.keys?.auth || '',
+              subscription: {
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: subJson.keys?.p256dh || '',
+                  auth: subJson.keys?.auth || '',
+                },
               },
+              topics: this.topics,
             },
-            topics: this.topics,
           },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.authToken}`,
+          {
+            headers: {
+              Authorization: `Bearer ${this.authToken}`,
+            },
           },
-        },
+        ),
       );
 
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
+      if (result.code === 'ok') {
         this.isRegisteredOnServer = true;
         this.showToast('🎉 设备订阅注册成功！');
         await this.refreshData();
       } else {
-        this.showDialog('订阅失败', `❌ 服务器端订阅失败: ${this.formatError(data)}`);
+        this.showDialog('订阅失败', `❌ 服务器端订阅失败: ${result.msg}`);
       }
     } catch (err: any) {
       console.error('订阅出错:', err);
@@ -448,19 +450,21 @@ export class WebPushState {
           this.showDialog('注销失败', '❌ 未找到本机设备记录，请刷新后重试');
           return;
         }
-        const res = await client.api.devices[':id'].$delete(
-          {
-            param: { id: deviceId },
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${this.authToken}`,
+
+        const result = await unwrap(
+          client.api.devices[':id'].$delete(
+            {
+              param: { id: deviceId },
             },
-          },
+            {
+              headers: {
+                Authorization: `Bearer ${this.authToken}`,
+              },
+            },
+          ),
         );
 
-        const data = await readApiJson(res);
-        if (res.ok && data.success) {
+        if (result.code === 'ok') {
           const registration = await this.getSWRegistration();
           const sub = await registration.pushManager.getSubscription();
           if (sub) {
@@ -474,7 +478,7 @@ export class WebPushState {
           this.showToast('👋 设备注销成功！');
           await this.refreshData();
         } else {
-          this.showDialog('注销失败', `❌ 服务器端注销失败: ${this.formatError(data)}`);
+          this.showDialog('注销失败', `❌ 注销失败: ${result.msg}`);
         }
       } catch (err: any) {
         console.error('注销出错:', err);
@@ -486,17 +490,16 @@ export class WebPushState {
   async fetchDevices() {
     if (!this.authToken) return;
     try {
-      const res = await client.api.devices.$get(undefined, {
-        headers: {
-          Authorization: `Bearer ${this.authToken}`,
-        },
-      });
-      if (res.ok) {
-        const data = await readApiJson(res);
-        if (data.success) {
-          this.devicesList = data.data || [];
-          this.checkServerRegistration();
-        }
+      const result = await unwrap(
+        client.api.devices.$get(undefined, {
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+        }),
+      );
+      if (result.code === 'ok') {
+        this.devicesList = result.data || [];
+        this.checkServerRegistration();
       }
     } catch (err) {
       console.error('获取设备列表失败:', err);
@@ -518,33 +521,34 @@ export class WebPushState {
     this.sendStatus = { success: false, message: '' };
 
     try {
-      const res = await client.api.push[':topic'].$post(
-        {
-          param: { topic: this.sendTopic || 'default' },
-          json: {
-            title: this.sendTitle || undefined,
-            body: this.sendBody,
-            url: this.sendUrl || undefined,
-            priority: this.sendPriority,
-            tags: this.sendTags || undefined,
+      const result = await unwrap(
+        client.api.push[':topic'].$post(
+          {
+            param: { topic: this.sendTopic || 'default' },
+            json: {
+              title: this.sendTitle || undefined,
+              body: this.sendBody,
+              url: this.sendUrl || undefined,
+              priority: this.sendPriority,
+              tags: this.sendTags || undefined,
+            },
           },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.authToken}`,
+          {
+            headers: {
+              Authorization: `Bearer ${this.authToken}`,
+            },
           },
-        },
+        ),
       );
 
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
+      if (result.code === 'ok') {
         this.sendStatus = {
           success: true,
-          message: `🚀 已向 ${data.data.sent} 台设备发起推送。`,
+          message: `🚀 已向 ${result.data.sent} 台设备发起推送。`,
         };
 
         // Save the sent notification locally in Dexie IndexedDB
-        const sentId = data.data.id || crypto.randomUUID();
+        const sentId = result.data.id || crypto.randomUUID();
         await db.notifications
           .put({
             id: sentId,
@@ -564,7 +568,7 @@ export class WebPushState {
         this.sendTags = '';
         await this.loadHistoryFromDexie();
       } else {
-        this.showDialog('发送失败', `❌ 发送失败: ${this.formatError(data)}`);
+        this.sendStatus = { success: false, message: `❌ 发送失败: ${result.msg}` };
       }
     } catch (err: any) {
       this.sendStatus = { success: false, message: `❌ 发送异常: ${err.message}` };
@@ -573,36 +577,26 @@ export class WebPushState {
     }
   }
 
-  // Helper to format API errors
-  formatError(data: any): string {
-    if (!data) return '未知错误';
-    if (data.error) {
-      if (Array.isArray(data.error)) {
-        return data.error.map((e: any) => e.message || '输入格式错误').join(', ');
-      }
-      return String(data.error);
-    }
-    return '未知错误';
-  }
-
   async login(username: string, password: string, turnstileToken?: string) {
     try {
-      const res = await client.api.auth.login.$post({
-        json: { username, password, turnstileToken },
-      });
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
-        this.sessionToken = data.data.token; // JWT，仅用于 API 请求
-        this.refreshToken = data.data.refreshToken;
-        this.user = data.data.user;
-        this.showToast('🎉 登录成功！');
-        await this.refreshData();
-        return { success: true };
-      } else {
-        const errMsg = this.formatError(data);
-        this.showDialog('登录失败', `❌ 登录失败: ${errMsg}`);
-        return { success: false, error: errMsg };
-      }
+      const result = await unwrap(
+        client.api.auth.login.$post({
+          json: { username, password, turnstileToken },
+        }),
+      );
+      return match(result)
+        .with({ code: 'ok' }, async (res) => {
+          this.sessionToken = res.data.token; // JWT，仅用于 API 请求
+          this.refreshToken = res.data.refreshToken;
+          this.user = res.data.user;
+          this.showToast('🎉 登录成功！');
+          await this.refreshData();
+          return { success: true };
+        })
+        .otherwise((res) => {
+          this.showDialog('登录失败', `❌ 登录失败: ${res.msg}`);
+          return { success: false, error: res.msg };
+        });
     } catch (err: any) {
       console.error('Login error:', err);
       this.showDialog('登录异常', `❌ 登录发生异常: ${err.message}`);
@@ -612,22 +606,24 @@ export class WebPushState {
 
   async register(username: string, password: string, code?: string, turnstileToken?: string) {
     try {
-      const res = await client.api.auth.register.$post({
-        json: { username, password, code: code || undefined, turnstileToken },
-      });
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
-        this.sessionToken = data.data.token; // JWT，仅用于 API 请求
-        this.refreshToken = data.data.refreshToken;
-        this.user = data.data.user;
-        this.showToast('🎉 注册成功并已自动登录！');
-        await this.refreshData();
-        return { success: true };
-      } else {
-        const errMsg = this.formatError(data);
-        this.showDialog('注册失败', `❌ 注册失败: ${errMsg}`);
-        return { success: false, error: errMsg };
-      }
+      const result = await unwrap(
+        client.api.auth.register.$post({
+          json: { username, password, code: code || undefined, turnstileToken },
+        }),
+      );
+      return match(result)
+        .with({ code: 'ok' }, async (res) => {
+          this.sessionToken = res.data.token; // JWT，仅用于 API 请求
+          this.refreshToken = res.data.refreshToken;
+          this.user = res.data.user;
+          this.showToast('🎉 注册成功并已自动登录！');
+          await this.refreshData();
+          return { success: true };
+        })
+        .otherwise((res) => {
+          this.showDialog('注册失败', `❌ 注册失败: ${res.msg}`);
+          return { success: false, error: res.msg };
+        });
     } catch (err: any) {
       console.error('Register error:', err);
       this.showDialog('注册异常', `❌ 注册发生异常: ${err.message}`);
@@ -650,10 +646,9 @@ export class WebPushState {
 
   async fetchVapidPublicKey(): Promise<string> {
     try {
-      const res = await client.api.vapid.$get();
-      const data = await readApiJson(res);
-      if (res.ok && data.success && data.data.publicKey) {
-        this.vapidPublicKey = data.data.publicKey;
+      const result = await unwrap(client.api.vapid.$get());
+      if (result.code === 'ok' && result.data.publicKey) {
+        this.vapidPublicKey = result.data.publicKey;
         localStorage.setItem('webpush_vapid_public_key', this.vapidPublicKey);
         return this.vapidPublicKey;
       }
@@ -666,18 +661,19 @@ export class WebPushState {
   async refreshAccessToken(): Promise<boolean> {
     if (!this.refreshToken) return false;
     try {
-      const res = await client.api.auth.refresh.$post({
-        json: { refreshToken: this.refreshToken },
-      });
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
-        this.sessionToken = data.data.token;
-        this.refreshToken = data.data.refreshToken;
+      const result = await unwrap(
+        client.api.auth.refresh.$post({
+          json: { refreshToken: this.refreshToken },
+        }),
+      );
+      if (result.code === 'ok') {
+        this.sessionToken = result.data.token;
+        this.refreshToken = result.data.refreshToken;
         this.decodeUserFromToken(this.sessionToken);
         console.log('🔄 Access Token refreshed successfully.');
         return true;
       } else {
-        console.warn('🔄 Token refresh failed, logging out user.');
+        console.warn('🔄 Token refresh failed, logging out user:', result.msg);
         this.logout();
         return false;
       }
@@ -691,16 +687,15 @@ export class WebPushState {
   async fetchApiTokens() {
     if (!this.authToken || !this.user) return;
     try {
-      const res = await client.api.auth.tokens.$get(undefined, {
-        headers: {
-          Authorization: `Bearer ${this.authToken}`,
-        },
-      });
-      if (res.ok) {
-        const data = await readApiJson(res);
-        if (data.success) {
-          this.apiTokensList = data.data || [];
-        }
+      const result = await unwrap(
+        client.api.auth.tokens.$get(undefined, {
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+        }),
+      );
+      if (result.code === 'ok') {
+        this.apiTokensList = result.data || [];
       }
     } catch (err) {
       console.error('获取 API Token 列表失败:', err);
@@ -709,25 +704,26 @@ export class WebPushState {
 
   async generateApiToken(name: string) {
     try {
-      const res = await client.api.auth.token.$post(
-        {
-          json: { name },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.authToken}`,
+      const result = await unwrap(
+        client.api.auth.token.$post(
+          {
+            json: { name },
           },
-        },
+          {
+            headers: {
+              Authorization: `Bearer ${this.authToken}`,
+            },
+          },
+        ),
       );
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
+      if (result.code === 'ok') {
         await this.fetchApiTokens();
         this.showToast('🎉 Token 生成成功！');
-        return { success: true, token: data.data.token };
+        return { success: true, token: result.data.token };
       } else {
-        const errMsg = this.formatError(data);
-        this.showDialog('生成失败', `❌ 生成 Token 失败: ${errMsg}`);
-        return { success: false, error: errMsg };
+        const errorMsg = (result as any).msg || '未知错误';
+        this.showDialog('生成失败', `❌ 生成 Token 失败: ${errorMsg}`);
+        return { success: false, error: errorMsg };
       }
     } catch (err: any) {
       console.error('Generate token error:', err);
@@ -742,23 +738,23 @@ export class WebPushState {
       '确定要注销此 API Token 吗？使用该 Token 的外部集成将全部失效！',
       async () => {
         try {
-          const res = await client.api.auth.tokens[':id'].$delete(
-            {
-              param: { id },
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${this.authToken}`,
+          const result = await unwrap(
+            client.api.auth.tokens[':id'].$delete(
+              {
+                param: { id },
               },
-            },
+              {
+                headers: {
+                  Authorization: `Bearer ${this.authToken}`,
+                },
+              },
+            ),
           );
-          const data = await readApiJson(res);
-          if (res.ok && data.success) {
+          if (result.code === 'ok') {
             this.showToast('🎉 Token 已注销！');
             await this.fetchApiTokens();
           } else {
-            const errMsg = this.formatError(data);
-            this.showDialog('注销失败', `❌ 注销失败: ${errMsg}`);
+            this.showDialog('注销失败', `❌ 注销失败: ${result.msg}`);
           }
         } catch (err: any) {
           console.error('Revoke token error:', err);
@@ -771,16 +767,15 @@ export class WebPushState {
   async fetchInvitationCodes() {
     if (!this.authToken || !this.user || this.user.role !== 'admin') return;
     try {
-      const res = await client.api.auth.invitations.$get(undefined, {
-        headers: {
-          Authorization: `Bearer ${this.authToken}`,
-        },
-      });
-      if (res.ok) {
-        const data = await readApiJson(res);
-        if (data.success) {
-          this.invitationCodesList = data.data || [];
-        }
+      const result = await unwrap(
+        client.api.auth.invitations.$get(undefined, {
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+        }),
+      );
+      if (result.code === 'ok') {
+        this.invitationCodesList = result.data || [];
       }
     } catch (err) {
       console.error('获取邀请码列表失败:', err);
@@ -789,18 +784,18 @@ export class WebPushState {
 
   async generateInvitationCode() {
     try {
-      const res = await client.api.auth.invitations.$post(undefined, {
-        headers: {
-          Authorization: `Bearer ${this.authToken}`,
-        },
-      });
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
+      const result = await unwrap(
+        client.api.auth.invitations.$post(undefined, {
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+        }),
+      );
+      if (result.code === 'ok') {
         await this.fetchInvitationCodes();
         this.showToast('🎉 邀请码生成成功！');
       } else {
-        const errMsg = this.formatError(data);
-        this.showDialog('生成失败', `❌ 生成邀请码失败: ${errMsg}`);
+        this.showDialog('生成失败', `❌ 生成邀请码失败: ${result.msg}`);
       }
     } catch (err: any) {
       console.error('Generate invitation code error:', err);
@@ -811,23 +806,23 @@ export class WebPushState {
   async revokeInvitationCode(code: string) {
     this.showConfirm('废销邀请码', '确定要废销此邀请码吗？', async () => {
       try {
-        const res = await client.api.auth.invitations[':code'].$delete(
-          {
-            param: { code },
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${this.authToken}`,
+        const result = await unwrap(
+          client.api.auth.invitations[':code'].$delete(
+            {
+              param: { code },
             },
-          },
+            {
+              headers: {
+                Authorization: `Bearer ${this.authToken}`,
+              },
+            },
+          ),
         );
-        const data = await readApiJson(res);
-        if (res.ok && data.success) {
+        if (result.code === 'ok') {
           this.showToast('🎉 邀请码已废销！');
           await this.fetchInvitationCodes();
         } else {
-          const errMsg = this.formatError(data);
-          this.showDialog('废销失败', `❌ 废销失败: ${errMsg}`);
+          this.showDialog('废销失败', `❌ 废销失败: ${result.msg}`);
         }
       } catch (err: any) {
         console.error('Revoke invitation code error:', err);
@@ -839,19 +834,18 @@ export class WebPushState {
   async fetchTopics() {
     if (!this.authToken || !this.user) return;
     try {
-      const res = await client.api.topics.$get(undefined, {
-        headers: {
-          Authorization: `Bearer ${this.authToken}`,
-        },
-      });
-      if (res.ok) {
-        const data = await readApiJson(res);
-        if (data.success) {
-          this.userTopics = data.data || [];
-          const topicNames = this.userTopics.map((topic) => topic.name);
-          if (topicNames.length > 0 && !topicNames.includes(this.sendTopic)) {
-            this.sendTopic = topicNames.includes('default') ? 'default' : topicNames[0];
-          }
+      const result = await unwrap(
+        client.api.topics.$get(undefined, {
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+        }),
+      );
+      if (result.code === 'ok') {
+        this.userTopics = result.data || [];
+        const topicNames = this.userTopics.map((topic) => topic.name);
+        if (topicNames.length > 0 && !topicNames.includes(this.sendTopic)) {
+          this.sendTopic = topicNames.includes('default') ? 'default' : topicNames[0];
         }
       }
     } catch (err) {
@@ -862,24 +856,24 @@ export class WebPushState {
   async createTopic(name: string) {
     if (!name.trim()) return false;
     try {
-      const res = await client.api.topics.$post(
-        {
-          json: { name },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.authToken}`,
+      const result = await unwrap(
+        client.api.topics.$post(
+          {
+            json: { name },
           },
-        },
+          {
+            headers: {
+              Authorization: `Bearer ${this.authToken}`,
+            },
+          },
+        ),
       );
-      const data = await readApiJson(res);
-      if (res.ok && data.success) {
+      if (result.code === 'ok') {
         this.showToast('🎉 主题创建成功！');
         await this.fetchTopics();
         return true;
       } else {
-        const errMsg = this.formatError(data);
-        this.showDialog('创建失败', `❌ 创建主题失败: ${errMsg}`);
+        this.showDialog('创建失败', `❌ 创建主题失败: ${result.msg}`);
         return false;
       }
     } catch (err: any) {
@@ -899,18 +893,19 @@ export class WebPushState {
       `确定要删除主题 "${name}" 吗？该操作会导致所有设备自动退订该主题！`,
       async () => {
         try {
-          const res = await client.api.topics[':name'].$delete(
-            {
-              param: { name },
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${this.authToken}`,
+          const result = await unwrap(
+            client.api.topics[':name'].$delete(
+              {
+                param: { name },
               },
-            },
+              {
+                headers: {
+                  Authorization: `Bearer ${this.authToken}`,
+                },
+              },
+            ),
           );
-          const data = await readApiJson(res);
-          if (res.ok && data.success) {
+          if (result.code === 'ok') {
             this.showToast(`🎉 主题 "${name}" 已成功删除！`);
             this.selectedTopics = this.selectedTopics.filter((t) => t !== name);
             await this.fetchTopics();
@@ -920,8 +915,7 @@ export class WebPushState {
                 : (this.userTopics[0]?.name ?? 'default');
             }
           } else {
-            const errMsg = this.formatError(data);
-            this.showDialog('删除失败', `❌ 删除主题失败: ${errMsg}`);
+            this.showDialog('删除失败', `❌ 删除主题失败: ${result.msg}`);
           }
         } catch (err: any) {
           console.error('Delete topic error:', err);

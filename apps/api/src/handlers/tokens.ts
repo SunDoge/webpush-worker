@@ -11,7 +11,7 @@ export const createToken = factory.createHandlers(
   async (c) => {
     const user = c.var.user;
     const { name } = c.req.valid('json');
-    const db = getDb(c.env.DB);
+    const { db } = getDb(c.env.DB);
 
     // Generate a 24-byte random token encoded as base64url with wpt_ prefix
     const buffer = new Uint8Array(24);
@@ -43,7 +43,7 @@ export const createToken = factory.createHandlers(
       .execute();
 
     return c.json({
-      code: 'ok',
+      code: 'ok' as const,
       data: {
         id: tokenId,
         name,
@@ -57,7 +57,7 @@ export const createToken = factory.createHandlers(
 
 export const listTokens = factory.createHandlers(async (c) => {
   const user = c.var.user;
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   const tokens = await db
     .selectFrom('api_tokens')
@@ -66,16 +66,16 @@ export const listTokens = factory.createHandlers(async (c) => {
     .orderBy('created_at', 'desc')
     .execute();
 
-  return c.json({ code: 'ok', data: tokens });
+  return c.json({ code: 'ok' as const, data: tokens });
 });
 
 export const revokeToken = factory.createHandlers(async (c) => {
   const user = c.var.user;
   const tokenId = c.req.param('id');
   if (!tokenId) {
-    return c.json({ code: 'invalid_params', msg: 'Token ID parameter is required' }, 400);
+    return c.json({ code: 'invalid_params' as const, msg: 'Token ID parameter is required' }, 400);
   }
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   await db
     .deleteFrom('api_tokens')
@@ -83,5 +83,5 @@ export const revokeToken = factory.createHandlers(async (c) => {
     .where('user_id', '=', user.id)
     .execute();
 
-  return c.json({ code: 'ok', data: null });
+  return c.json({ code: 'ok' as const, data: null });
 });

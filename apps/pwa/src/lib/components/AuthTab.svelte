@@ -12,8 +12,7 @@ import {
 } from 'konsta/svelte';
 import { onMount } from 'svelte';
 import { safeParse } from 'valibot';
-import type { WebPushState } from '../webpush-state.svelte';
-import { client, readApiJson } from '../webpush-state.svelte';
+import { client, unwrap, type WebPushState } from '../webpush-state.svelte';
 
 interface Props {
   appState: WebPushState;
@@ -97,13 +96,10 @@ $effect(() => {
 
 onMount(async () => {
   try {
-    const res = await client.api.auth['setup-status'].$get();
-    if (res.ok) {
-      const data = await readApiJson(res);
-      if (data.success) {
-        hasUsers = data.data.hasUsers;
-        appState.turnstileSiteKey = data.data.turnstileSiteKey;
-      }
+    const result = await unwrap(client.api.auth['setup-status'].$get());
+    if (result.code === 'ok') {
+      hasUsers = result.data.hasUsers;
+      appState.turnstileSiteKey = result.data.turnstileSiteKey;
     }
   } catch (err) {
     console.error('获取注册配置状态失败:', err);

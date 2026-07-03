@@ -8,7 +8,7 @@ const factory = createFactory<AuthEnv>();
 
 export const listTopics = factory.createHandlers(async (c) => {
   const user = c.var.user;
-  const db = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   const list = await db
     .selectFrom('user_topics')
@@ -17,7 +17,7 @@ export const listTopics = factory.createHandlers(async (c) => {
     .orderBy('name', 'asc')
     .execute();
 
-  return c.json({ code: 'ok', data: list });
+  return c.json({ code: 'ok' as const, data: list });
 });
 
 export const createTopic = factory.createHandlers(
@@ -25,7 +25,7 @@ export const createTopic = factory.createHandlers(
   async (c) => {
     const user = c.var.user;
     const { name } = c.req.valid('json');
-    const db = getDb(c.env.DB);
+    const { db } = getDb(c.env.DB);
 
     const existing = await db
       .selectFrom('user_topics')
@@ -35,7 +35,7 @@ export const createTopic = factory.createHandlers(
       .executeTakeFirst();
 
     if (existing) {
-      return c.json({ code: 'topic_already_exists', msg: 'Topic already exists' }, 400);
+      return c.json({ code: 'topic_already_exists' as const, msg: 'Topic already exists' }, 400);
     }
 
     await db
@@ -43,7 +43,7 @@ export const createTopic = factory.createHandlers(
       .values({ user_id: user.id, name, created_at: Math.floor(Date.now() / 1000) })
       .execute();
 
-    return c.json({ code: 'ok', data: { name } });
+    return c.json({ code: 'ok' as const, data: { name } });
   },
 );
 
@@ -51,29 +51,26 @@ export const deleteTopic = factory.createHandlers(async (c) => {
   const user = c.var.user;
   const name = c.req.param('name');
   if (!name) {
-    return c.json({ code: 'invalid_params', msg: 'Name parameter is required' }, 400);
+    return c.json({ code: 'invalid_params' as const, msg: 'Name parameter is required' }, 400);
   }
 
   if (name === 'default') {
-    return c.json({ code: 'invalid_params', msg: 'Cannot delete the default topic' }, 400);
+    return c.json({ code: 'invalid_params' as const, msg: 'Cannot delete the default topic' }, 400);
   }
 
-  const db = getDb(c.env.DB);
+  const { db, dialect } = getDb(c.env.DB);
 
-  await db
-    .deleteFrom('user_topics')
-    .where('user_id', '=', user.id)
-    .where('name', '=', name)
-    .execute();
+  const q1 = db.deleteFrom('user_topics').where('user_id', '=', user.id).where('name', '=', name);
 
   // Cascade: remove this topic from all of the user's device subscriptions
-  await db
+  const q2 = db
     .deleteFrom('device_topics')
     .where('topic', '=', name)
     .where('device_id', 'in', (eb) =>
       eb.selectFrom('devices').select('id').where('user_id', '=', user.id),
-    )
-    .execute();
+    );
 
-  return c.json({ code: 'ok', data: null });
+  await dialect.batch([q1.compile(), q2.compile()]);
+
+  return c.json({ code: 'ok' as const, data: null });
 });
