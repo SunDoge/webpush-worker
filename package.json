@@ -6,15 +6,17 @@
     "pkgs/*"
   ],
   "scripts": {
-    "dev:api": "cd apps/api && bun run dev",
-    "dev:pwa": "cd apps/pwa && bun run dev",
+    "dev:api": "bun --filter @webpush-worker/api dev",
+    "dev:pwa": "bun --filter @webpush-worker/pwa dev",
     "dev": "bun run dev:api & bun run dev:pwa",
     "build": "bun --filter=@webpush-worker/pwa run build",
     "deploy": "bun run build && wrangler deploy --config apps/api/wrangler.jsonc",
-    "gen-schema": "cd apps/api && bun run gen-schema",
+    "gen-schema": "bun --filter @webpush-worker/api gen-schema",
     "format": "biome format --write .",
     "lint": "biome lint .",
-    "check": "biome check --write --unsafe ."
+    "check": "biome check --write --unsafe .",
+    "db:apply:local": "bun --filter @webpush-worker/api db:apply:local",
+    "db:apply:remote": "bun --filter @webpush-worker/api db:apply:remote"
   },
   "resolutions": {
     "vite": "7.3.6",

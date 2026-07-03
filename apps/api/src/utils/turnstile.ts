@@ -1,5 +1,3 @@
-// export const TURNSTILE_
-
 export async function verifyTurnstile(
   token: string | undefined,
   secretKey: string | undefined,

@@ -6,7 +6,9 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "gen-schema": "bun scripts/gen-shema.ts"
+    "gen-schema": "bun scripts/gen-shema.ts",
+    "db:apply:local": "wrangler d1 migrations apply webpush-db --local",
+    "db:apply:remote": "wrangler d1 migrations apply webpush-db --remote"
   },
   "dependencies": {
     "@hono/standard-validator": "^0.2.3",
