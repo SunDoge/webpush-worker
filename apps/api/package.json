@@ -17,7 +17,8 @@
     "kysely": "^0.29.2",
     "valibot": "^1.4.2",
     "@webpush-worker/shared": "workspace:*",
-    "webpush-webcrypto": "^1.0.5"
+    "webpush-webcrypto": "^1.0.5",
+    "ts-pattern": "^5.9.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260701.1",

@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "webpush-worker",
-      "dependencies": {
-        "ts-pattern": "^5.9.0",
-      },
       "devDependencies": {
         "@biomejs/biome": "^2.5.2",
       },
@@ -19,6 +16,7 @@
         "@webpush-worker/shared": "workspace:*",
         "hono": "^4.12.27",
         "kysely": "^0.29.2",
+        "ts-pattern": "^5.9.0",
         "valibot": "^1.4.2",
         "webpush-webcrypto": "^1.0.5",
       },
@@ -42,6 +40,7 @@
         "dexie": "^4.4.4",
         "hono": "^4.12.27",
         "konsta": "^5.2.0",
+        "ts-pattern": "^5.9.0",
       },
       "devDependencies": {
         "@hono/standard-validator": "^0.2.3",
