@@ -74,23 +74,17 @@ function renderTurnstile() {
   }
 }
 
-// Render Turnstile when container and sitekey are resolved
+let isScriptLoaded = $state(typeof window !== 'undefined' && !!(window as any).turnstile);
+
+// Render Turnstile when container, sitekey, and script are resolved
 $effect(() => {
   const container = turnstileContainer;
   const mode = isLoginMode;
   const siteKey = appState.turnstileSiteKey;
+  const loaded = isScriptLoaded;
 
-  if (container && siteKey) {
-    const checkInterval = setInterval(() => {
-      if ((window as any).turnstile) {
-        clearInterval(checkInterval);
-        renderTurnstile();
-      }
-    }, 100);
-
-    return () => {
-      clearInterval(checkInterval);
-    };
+  if (container && siteKey && loaded) {
+    renderTurnstile();
   }
 });
 
@@ -149,6 +143,20 @@ async function handleAuth() {
   }
 }
 </script>
+
+<svelte:head>
+  {#if appState.turnstileSiteKey}
+    <link rel="preconnect" href="https://challenges.cloudflare.com" />
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+      async
+      defer
+      onload={() => {
+        isScriptLoaded = true;
+      }}
+    ></script>
+  {/if}
+</svelte:head>
 
 <!-- ================= AUTH PANEL ================= -->
 <BlockTitle>用户注册与登录</BlockTitle>
