@@ -206,6 +206,8 @@ function copyInvitationCode(code: string) {
     type="text"
     placeholder="如 iPhone 15, Chrome-PC"
     bind:value={appState.deviceName}
+    maxlength="80"
+    onblur={() => appState.saveCurrentDeviceName()}
   />
   <ListInput
     label="订阅 Topics (逗号分隔)"

@@ -1,4 +1,5 @@
 import { sValidator } from '@hono/standard-validator';
+import { batch } from '@sundoge/kysely-d1';
 import { createFactory } from 'hono/factory';
 import { getDb } from '../db';
 import { createTopicSchema } from '../schemas';
@@ -8,7 +9,7 @@ const factory = createFactory<AuthEnv>();
 
 export const listTopics = factory.createHandlers(async (c) => {
   const user = c.var.user;
-  const { db, dialect } = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   let list = await db
     .selectFrom('user_topics')
@@ -32,7 +33,7 @@ export const listTopics = factory.createHandlers(async (c) => {
         .where('user_id', '=', user.id)
         .orderBy('name', 'asc');
 
-      const [, selectResult] = await dialect.batch([q1.compile(), q2.compile()]);
+      const [, selectResult] = await batch(c.env.DB, [q1, q2]);
       list = selectResult.rows;
     } catch (e) {
       console.error('Failed to auto-insert default topic:', e);
@@ -79,7 +80,7 @@ export const deleteTopic = factory.createHandlers(async (c) => {
     return c.json({ code: 'invalid_params' as const, msg: 'Cannot delete the default topic' }, 400);
   }
 
-  const { db, dialect } = getDb(c.env.DB);
+  const { db } = getDb(c.env.DB);
 
   const q1 = db.deleteFrom('user_topics').where('user_id', '=', user.id).where('name', '=', name);
 
@@ -91,7 +92,7 @@ export const deleteTopic = factory.createHandlers(async (c) => {
       eb.selectFrom('devices').select('id').where('user_id', '=', user.id),
     );
 
-  await dialect.batch([q1.compile(), q2.compile()]);
+  await batch(c.env.DB, [q1, q2]);
 
   return c.json({ code: 'ok' as const, data: null });
 });

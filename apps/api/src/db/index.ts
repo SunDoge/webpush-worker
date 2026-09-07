@@ -17,7 +17,7 @@ export function getDb(d1: D1Database) {
     dialect,
   });
 
-  return { db, dialect };
+  return { db };
 }
 
 // 重新导出 Schema 中所有的数据库类型定义

@@ -1,4 +1,5 @@
 import { sValidator } from '@hono/standard-validator';
+import { batch, type BatchQuery } from '@sundoge/kysely-d1';
 import { createFactory } from 'hono/factory';
 import { verify } from 'hono/jwt';
 import { getDb } from '../db';
@@ -29,7 +30,7 @@ export const getSetupStatus = factory.createHandlers(async (c) => {
 export const registerUser = factory.createHandlers(
   sValidator('json', registerSchema),
   async (c) => {
-    const { db, dialect } = getDb(c.env.DB);
+    const { db } = getDb(c.env.DB);
     const { username, password, code, turnstileToken } = c.req.valid('json') as any;
 
     const ip = c.req.header('CF-Connecting-IP');
@@ -97,17 +98,17 @@ export const registerUser = factory.createHandlers(
       .insertInto('user_topics')
       .values({ user_id: userId, name: 'default', created_at: createdAt });
 
-    const queries = [q1.compile(), q2.compile()];
+    const queries: BatchQuery[] = [q1, q2];
 
     if (matchedCode) {
       const q3 = db
         .updateTable('invitation_codes')
         .set({ status: 'used' as const, used_by: userId, used_at: createdAt })
         .where('code', '=', matchedCode);
-      queries.push(q3.compile());
+      queries.push(q3);
     }
 
-    await dialect.batch(queries);
+    await batch(c.env.DB, queries);
 
     const jwtSecret = c.env.JWT_SECRET;
     if (!jwtSecret) {

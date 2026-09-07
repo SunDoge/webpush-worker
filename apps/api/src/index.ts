@@ -47,6 +47,7 @@ const deviceRouter = new Hono<AuthEnv>()
   .use(authMiddleware)
   .get('/', ...deviceHandler.listDevices)
   .post('/subscribe', ...deviceHandler.subscribeDevice)
+  .patch('/:id', ...deviceHandler.renameDevice)
   .delete('/:id', ...deviceHandler.deleteDevice);
 
 // Push routes (Private)

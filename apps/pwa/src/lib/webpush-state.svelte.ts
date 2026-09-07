@@ -2,6 +2,7 @@ import type { AppType } from '@webpush-worker/api';
 import { hc } from 'hono/client';
 import { match } from 'ts-pattern';
 import { db } from './db';
+import { getDefaultDeviceName } from './device-info';
 
 let stateInstance: WebPushState | null = null;
 
@@ -63,7 +64,7 @@ export class WebPushState {
   // apiToken: 用户手动填写的长期 wpt_ Token，用于 CURL 命令展示和外部集成
   apiToken = $state(localStorage.getItem('webpush_api_token') || '');
 
-  deviceName = $state(localStorage.getItem('webpush_device_name') || 'My Mobile Browser');
+  deviceName = $state(localStorage.getItem('webpush_device_name') || '');
   topics = $state(localStorage.getItem('webpush_topics') || 'default');
   selectedTopics = $state<string[]>([]);
 
@@ -285,6 +286,10 @@ export class WebPushState {
   }
 
   async init() {
+    if (!this.deviceName.trim() || this.deviceName === 'My Mobile Browser') {
+      this.deviceName = await getDefaultDeviceName();
+    }
+
     // Detect OS theme
     this.isIOS =
       /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -500,10 +505,80 @@ export class WebPushState {
       if (result.code === 'ok') {
         this.devicesList = result.data || [];
         this.checkServerRegistration();
+        const localDevice = this.devicesList.find((device) => device.endpoint === this.localEndpoint);
+        if (localDevice?.name === 'My Mobile Browser' && this.deviceName !== localDevice.name) {
+          await this.renameDevice(localDevice.id, this.deviceName);
+        }
       }
     } catch (err) {
       console.error('获取设备列表失败:', err);
     }
+  }
+
+  async renameDevice(id: string, name: string) {
+    const cleanName = name.trim();
+    if (!cleanName) return false;
+
+    try {
+      const result = await unwrap(
+        client.api.devices[':id'].$patch(
+          { param: { id }, json: { name: cleanName } },
+          { headers: { Authorization: `Bearer ${this.authToken}` } },
+        ),
+      );
+      if (result.code !== 'ok') {
+        this.showDialog('重命名失败', result.msg);
+        return false;
+      }
+
+      const device = this.devicesList.find((item) => item.id === id);
+      if (device) device.name = cleanName;
+      if (device?.endpoint === this.localEndpoint) this.deviceName = cleanName;
+      this.showToast('设备名称已更新');
+      return true;
+    } catch (err: any) {
+      this.showDialog('重命名失败', err.message);
+      return false;
+    }
+  }
+
+  async saveCurrentDeviceName() {
+    const currentDevice = this.devicesList.find((item) => item.endpoint === this.localEndpoint);
+    if (currentDevice && currentDevice.name !== this.deviceName.trim()) {
+      await this.renameDevice(currentDevice.id, this.deviceName);
+    }
+  }
+
+  deleteRemoteDevice(id: string) {
+    const device = this.devicesList.find((item) => item.id === id);
+    if (!device) return;
+
+    this.showConfirm('删除设备', `确定要删除“${device.name}”吗？`, async () => {
+      try {
+        const result = await unwrap(
+          client.api.devices[':id'].$delete(
+            { param: { id } },
+            { headers: { Authorization: `Bearer ${this.authToken}` } },
+          ),
+        );
+        if (result.code !== 'ok') {
+          this.showDialog('删除失败', result.msg);
+          return;
+        }
+
+        if (device.endpoint === this.localEndpoint) {
+          const registration = await this.getSWRegistration();
+          await (await registration.pushManager.getSubscription())?.unsubscribe();
+          this.subscriptionJson = null;
+          this.localEndpoint = null;
+          this.isRegisteredOnServer = false;
+        }
+        this.devicesList = this.devicesList.filter((item) => item.id !== id);
+        this.showToast('设备已删除');
+      } catch (err: any) {
+        this.showDialog('删除失败', err.message);
+      }
+    });
   }
 
   async loadHistoryFromDexie() {

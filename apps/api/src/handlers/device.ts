@@ -1,7 +1,8 @@
 import { sValidator } from '@hono/standard-validator';
+import { batch, type BatchQuery } from '@sundoge/kysely-d1';
 import { createFactory } from 'hono/factory';
 import { getDb } from '../db';
-import { subscribeSchema } from '../schemas';
+import { renameDeviceSchema, subscribeSchema } from '../schemas';
 import type { AuthEnv } from '../types';
 
 const factory = createFactory<AuthEnv>();
@@ -24,7 +25,7 @@ export const subscribeDevice = factory.createHandlers(
   sValidator('json', subscribeSchema),
   async (c) => {
     const user = c.var.user;
-    const { db, dialect } = getDb(c.env.DB);
+    const { db } = getDb(c.env.DB);
 
     const body = c.req.valid('json') as any;
 
@@ -54,18 +55,27 @@ export const subscribeDevice = factory.createHandlers(
     }
 
     // 先查是否已存在（复用旧 ID），否则服务端生成新 UUID
-    const existing = await db
+    const endpointOwner = await db
       .selectFrom('devices')
-      .select('id')
+      .select(['id', 'user_id'])
       .where('endpoint', '=', body.endpoint)
-      .where('user_id', '=', user.id)
       .executeTakeFirst();
 
-    const deviceId = existing?.id ?? crypto.randomUUID();
+    if (endpointOwner && endpointOwner.user_id !== user.id) {
+      return c.json(
+        {
+          code: 'device_already_registered' as const,
+          msg: 'This push subscription is already registered to another account',
+        },
+        409,
+      );
+    }
 
-    const queries = [];
+    const deviceId = endpointOwner?.id ?? crypto.randomUUID();
 
-    if (existing) {
+    const queries: BatchQuery[] = [];
+
+    if (endpointOwner) {
       queries.push(
         db
           .updateTable('devices')
@@ -74,8 +84,7 @@ export const subscribeDevice = factory.createHandlers(
             subscription: subStr,
             last_seen_at: Math.floor(Date.now() / 1000),
           })
-          .where('id', '=', deviceId)
-          .compile(),
+          .where('id', '=', deviceId),
       );
     } else {
       queries.push(
@@ -88,25 +97,48 @@ export const subscribeDevice = factory.createHandlers(
             endpoint: body.endpoint,
             subscription: subStr,
             last_seen_at: Math.floor(Date.now() / 1000),
-          })
-          .compile(),
+          }),
       );
     }
 
-    queries.push(db.deleteFrom('device_topics').where('device_id', '=', deviceId).compile());
+    queries.push(db.deleteFrom('device_topics').where('device_id', '=', deviceId));
 
     if (topicsArray.length > 0) {
       queries.push(
         db
           .insertInto('device_topics')
-          .values(topicsArray.map((topic: string) => ({ device_id: deviceId, topic })))
-          .compile(),
+          .values(topicsArray.map((topic: string) => ({ device_id: deviceId, topic }))),
       );
     }
 
-    await dialect.batch(queries);
+    await batch(c.env.DB, queries);
 
     return c.json({ code: 'ok' as const, data: { id: deviceId } });
+  },
+);
+
+export const renameDevice = factory.createHandlers(
+  sValidator('json', renameDeviceSchema),
+  async (c) => {
+    const id = c.req.param('id');
+    if (!id) {
+      return c.json({ code: 'invalid_params' as const, msg: 'ID parameter is required' }, 400);
+    }
+    const { name } = c.req.valid('json');
+    const { db } = getDb(c.env.DB);
+
+    const result = await db
+      .updateTable('devices')
+      .set({ name })
+      .where('id', '=', id)
+      .where('user_id', '=', c.var.user.id)
+      .executeTakeFirst();
+
+    if (result.numUpdatedRows === 0n) {
+      return c.json({ code: 'not_found' as const, msg: 'Device not found' }, 404);
+    }
+
+    return c.json({ code: 'ok' as const, data: { id, name } });
   },
 );
 

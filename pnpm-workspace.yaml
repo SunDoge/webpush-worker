@@ -3,10 +3,16 @@ packages:
   - "pkgs/*"
 
 overrides:
-  vite: 7.3.6
+  vite: 8.2.2
   sharp: 0.35.0
   sharp-ico: ^0.1.5
   undici: 7.29.0
+
+# Kysely D1's Cloudflare types peer has not yet widened for Workers Types 5.
+# Its public D1Database surface remains compatible and is checked by TypeScript below.
+peerDependencyRules:
+  allowedVersions:
+    "@sundoge/kysely-d1>@cloudflare/workers-types": ">=4 <6"
 
 allowBuilds:
   "@biomejs/biome": true

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { createTopicSchema } from '@webpush-worker/shared';
+import { Pencil, Trash2 } from '@lucide/svelte';
 import {
   Badge,
   Block,
@@ -24,6 +25,8 @@ let { appState }: Props = $props();
 // Local form state for new topic
 let newTopicName = $state('');
 let topicTouched = $state(false);
+let editingDeviceId = $state<string | null>(null);
+let editingDeviceName = $state('');
 
 const topicValidation = $derived(safeParse(createTopicSchema, { name: newTopicName.trim() }));
 const topicError = $derived(
@@ -187,9 +190,23 @@ async function handleCreateTopic() {
       {@const isSelf = dev.endpoint === appState.localEndpoint}
       <ListItem
         title={dev.name}
-        after={isSelf ? '本机' : ''}
-        text={`注册时间: ${formatDate(dev.created_at)}`}
-      />
+        text={`注册: ${formatDate(dev.created_at)} · 最近活跃: ${formatDate(dev.last_seen_at)}`}
+      >
+        {#snippet after()}
+          <div class="flex items-center gap-1">
+            {#if isSelf}<span class="text-xs text-slate-400">本机</span>{/if}
+            <Button small clear aria-label="重命名设备" onclick={() => { editingDeviceId = dev.id; editingDeviceName = dev.name; }}><Pencil size="16" /></Button>
+            <Button small clear aria-label="删除设备" onclick={() => appState.deleteRemoteDevice(dev.id)} colors={{ textIos: 'text-red-500', textMaterial: 'text-red-500' }}><Trash2 size="16" /></Button>
+          </div>
+        {/snippet}
+      </ListItem>
+      {#if editingDeviceId === dev.id}
+        <div class="flex gap-2 px-4 pb-3">
+          <input class="min-w-0 flex-1 rounded border border-slate-300 bg-transparent px-2 py-1" bind:value={editingDeviceName} maxlength="80" />
+          <Button small onclick={async () => { if (await appState.renameDevice(dev.id, editingDeviceName)) editingDeviceId = null; }}>保存</Button>
+          <Button small outline onclick={() => editingDeviceId = null}>取消</Button>
+        </div>
+      {/if}
     {/each}
   </List>
 {/if}
