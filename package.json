@@ -1,27 +1,23 @@
 {
   "name": "webpush-worker",
   "version": "0.1.0",
-  "workspaces": [
-    "apps/*",
-    "pkgs/*"
-  ],
+  "private": true,
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=26 <27"
+  },
   "scripts": {
-    "dev:api": "bun --filter @webpush-worker/api dev",
-    "dev:pwa": "bun --filter @webpush-worker/pwa dev",
-    "dev": "bun run dev:api & bun run dev:pwa",
-    "build": "bun --filter=@webpush-worker/pwa run build",
-    "deploy": "bun run build && wrangler deploy --config apps/api/wrangler.jsonc",
-    "gen-schema": "bun --filter @webpush-worker/api gen-schema",
+    "dev:api": "pnpm --filter @webpush-worker/api run dev",
+    "dev:pwa": "pnpm --filter @webpush-worker/pwa run dev",
+    "dev": "pnpm --parallel --filter './apps/*' run dev",
+    "build": "pnpm --filter @webpush-worker/pwa run build",
+    "deploy": "pnpm run build && pnpm --filter @webpush-worker/api run deploy",
+    "gen-schema": "pnpm --filter @webpush-worker/api run gen-schema",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write --unsafe .",
-    "db:apply:local": "bun --filter @webpush-worker/api db:apply:local",
-    "db:apply:remote": "bun --filter @webpush-worker/api db:apply:remote"
-  },
-  "resolutions": {
-    "vite": "7.3.6",
-    "sharp": "0.34.5",
-    "sharp-ico": "^0.1.5"
+    "db:apply:local": "pnpm --filter @webpush-worker/api run db:apply:local",
+    "db:apply:remote": "pnpm --filter @webpush-worker/api run db:apply:remote"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2"

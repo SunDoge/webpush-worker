@@ -1,20 +1,16 @@
 import { join } from 'node:path';
-import { $, Glob } from 'bun';
+import { execFileSync } from 'node:child_process';
+import { readdir } from 'node:fs/promises';
+
+const scriptsDir = import.meta.dirname;
 
 async function main() {
-  const d1Dir = join(import.meta.dir, '../.wrangler/state/v3/d1/miniflare-D1DatabaseObject');
+  const d1Dir = join(scriptsDir, '../.wrangler/state/v3/d1/miniflare-D1DatabaseObject');
 
   try {
-    // 使用 Bun 原生的 Glob 查找 .sqlite 文件
-    const glob = new Glob('*.sqlite');
-    let dbFile: string | undefined;
-
-    for await (const file of glob.scan(d1Dir)) {
-      if (file !== 'metadata.sqlite') {
-        dbFile = file;
-        break;
-      }
-    }
+    const dbFile = (await readdir(d1Dir)).find(
+      (file) => file.endsWith('.sqlite') && file !== 'metadata.sqlite',
+    );
 
     if (!dbFile) {
       console.error(
@@ -24,13 +20,16 @@ async function main() {
     }
 
     const dbPath = join(d1Dir, dbFile);
-    console.log(`🔍 [Bun Glob] 找到本地 D1 SQLite 路径: ${dbPath}`);
+    console.log(`🔍 找到本地 D1 SQLite 路径: ${dbPath}`);
 
-    const outPath = join(import.meta.dir, '../src/db/schema.d.ts');
+    const outPath = join(scriptsDir, '../src/db/schema.d.ts');
     console.log(`⚡ 正在调用 kysely-codegen 生成 Schema 到 -> ${outPath}`);
 
-    // 使用 Bun Shell 命令行执行
-    await $`bunx kysely-codegen --dialect sqlite --url ${dbPath} --out-file ${outPath}`;
+    execFileSync(
+      'pnpm',
+      ['exec', 'kysely-codegen', '--dialect', 'sqlite', '--url', dbPath, '--out-file', outPath],
+      { stdio: 'inherit' },
+    );
 
     console.log('✅ Kysely Schema 生成成功！');
   } catch (err: any) {

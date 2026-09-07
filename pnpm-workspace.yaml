@@ -1,0 +1,17 @@
+packages:
+  - "apps/*"
+  - "pkgs/*"
+
+overrides:
+  vite: 7.3.6
+  sharp: 0.35.0
+  sharp-ico: ^0.1.5
+  undici: 7.29.0
+
+allowBuilds:
+  "@biomejs/biome": true
+  "@tailwindcss/oxide": true
+  better-sqlite3: true
+  esbuild: true
+  sharp: true
+  workerd: true

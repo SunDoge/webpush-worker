@@ -3,13 +3,13 @@
 To install dependencies:
 
 ```bash
-bun install
+pnpm install
 ```
 
-To run:
+To start the API and PWA development servers:
 
 ```bash
-bun run index.ts
+pnpm dev
 ```
 
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+Requirements: Node.js 26 and pnpm 12.
